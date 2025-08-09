@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>YCoatching — Suivi calories & macros</title>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#0b1220; --card:#071428; --accent:#60a5fa; --accent-2:#34d399; --muted:#9fb0c8;
+    --glass: rgba(255,255,255,0.03); --radius:12px; --pad:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+    background: linear-gradient(180deg,#051223 0%, #071a2a 100%); color:#e6eef8; padding:18px;
+  }
+  .app{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 380px;gap:18px;}
+  header{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  h1{font-size:1.15rem;margin:0;display:flex;gap:10px;align-items:center}
+  .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:var(--pad); border-radius:var(--radius); box-shadow: 0 8px 30px rgba(1,5,12,0.6);}
+  .flex{display:flex;gap:10px;align-items:center}
+  label{font-size:0.85rem;color:var(--muted);display:block;margin-bottom:6px}
+  input[type="text"], input[type="number"], select{
+    width:100%; padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);
+    background:var(--glass); color:inherit; outline:none;
+  }
+  button{background:var(--accent); color:#04202a;border:none;padding:10px 12px;border-radius:10px;font-weight:700;cursor:pointer}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06); color:var(--muted)}
+  .small{font-size:0.85rem;color:var(--muted)}
+  nav.days{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .list{margin-top:12px;display:flex;flex-direction:column;gap:8px;max-height:360px;overflow:auto;padding-right:6px}
+  .item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px;border-radius:10px;background:rgba(255,255,255,0.015)}
+  .meta{font-size:0.85rem;color:var(--muted)}
+  .totals{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+  .row{display:flex;justify-content:space-between;align-items:center}
+  .progress{height:12px;border-radius:8px;background:rgba(255,255,255,0.03);overflow:hidden}
+  .progress > span{display:block;height:100%}
+  .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .small-muted{font-size:0.85rem;color:var(--muted)}
+  footer{grid-column:1/-1;margin-top:12px;color:var(--muted);font-size:0.85rem;text-align:center}
+  @media (max-width:980px){ .app{grid-template-columns:1fr; padding:0 8px} .card {padding:12px} }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>YCoatching <span class="small-muted">— ton mini coach nutrition</span></h1>
+      <div style="text-align:right">
+        <div id="streakDisplay" style="font-weight:700;font-size:1rem">🔥 0</div>
+        <div class="small-muted" id="lastSuccess">Dernier succès : —</div>
+      </div>
+    </header>
+
+    <!-- LEFT: Input / liste / historique -->
+    <section class="card" aria-labelledby="left-title">
+      <h2 id="left-title" style="margin:0 0 10px 0;font-size:1rem">Ajouter aliment / repas</h2>
+
+      <div style="display:grid;gap:8px">
+        <div>
+          <label for="date">Date</label>
+          <input id="date" type="date" />
+        </div>
+
+        <div>
+          <label for="food-select">Aliment (prérempli)</label>
+          <select id="food-select"></select>
+        </div>
+
+        <div class="flex" style="gap:8px">
+          <div style="flex:1">
+            <label for="portion">Portion (g)</label>
+            <input id="portion" type="number" step="1" value="100" />
+          </div>
+          <div style="width:120px">
+            <label for="qty">Quantité</label>
+            <input id="qty" type="number" step="0.1" value="1" />
+          </div>
+        </div>
+
+        <div class="small-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label for="calories">Calories (kcal)</label>
+            <input id="calories" type="number" step="any" placeholder="Auto" />
+          </div>
+          <div>
+            <label for="protein">Protéines (g)</label>
+            <input id="protein" type="number" step="any" placeholder="Auto" />
+          </div>
+        </div>
+
+        <div class="small-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div>
+            <label for="carbs">Glucides (g)</label>
+            <input id="carbs" type="number" step="any" placeholder="Auto" />
+          </div>
+          <div>
+            <label for="fat">Lipides (g)</label>
+            <input id="fat" type="number" step="any" placeholder="Auto" />
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;align-items:center">
+          <button id="addFoodBtn">Ajouter</button>
+          <button id="addCustomBtn" class="ghost">Ajouter aliment personnalisé</button>
+          <button id="clearFields" class="ghost">Réinitialiser champs</button>
+          <div style="margin-left:auto" class="small-muted">Items aujourd'hui : <span id="count">0</span></div>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <input id="searchDay" type="text" placeholder="Rechercher par aliment..." style="flex:1;padding:8px;border-radius:8px;background:var(--glass);border:1px solid rgba(255,255,255,0.05)" />
+          <button id="filterBtn" class="ghost">Filtrer</button>
+        </div>
+      </div>
+
+      <div class="list" id="itemsList" aria-live="polite" style="margin-top:12px"></div>
+    </section>
+
+    <!-- RIGHT: résumé, objectifs, chart -->
+    <aside class="card">
+      <h3 style="margin-top:0;margin-bottom:8px">Résumé & objectifs</h3>
+
+      <div style="display:flex;gap:8px;align-items:center;justify-content:space-between">
+        <div style="flex:1">
+          <label for="goalCal">Calories cible (kcal)</label>
+          <input id="goalCal" type="number" step="1" />
+        </div>
+        <div style="width:120px">
+          <label for="goalProt">Prot (g)</label>
+          <input id="goalProt" type="number" step="1" />
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <div style="flex:1">
+          <label for="goalCarb">Glucides (g)</label>
+          <input id="goalCarb" type="number" step="1" />
+        </div>
+        <div style="width:120px">
+          <label for="goalFat">Lipides (g)</label>
+          <input id="goalFat" type="number" step="1" />
+        </div>
+      </div>
+
+      <div class="totals">
+        <div class="row"><div>Calories totales</div><div id="totalCal">0 kcal</div></div>
+        <div class="row"><div>Protéines</div><div id="totalProt">0 g</div></div>
+        <div class="row"><div>Glucides</div><div id="totalCarb">0 g</div></div>
+        <div class="row"><div>Lipides</div><div id="totalFat">0 g</div></div>
+      </div>
+
+      <div style="margin-top:8px">
+        <div class="small-muted">Progression</div>
+        <div style="margin-top:6px">
+          <div class="small-muted">Calories <span id="pctCal" style="float:right">0%</span></div>
+          <div class="progress" aria-hidden="true"><span id="barCal" style="width:0%;background:linear-gradient(90deg,var(--accent),var(--accent-2))"></span></div>
+          <div class="small-muted" style="margin-top:6px">Prot <span id="pctProt" style="float:right">0%</span></div>
+          <div class="progress"><span id="barProt" style="width:0%;background:linear-gradient(90deg,#a78bfa,#60a5fa)"></span></div>
+          <div class="small-muted" style="margin-top:6px">Glucides <span id="pctCarb" style="float:right">0%</span></div>
+          <div class="progress"><span id="barCarb" style="width:0%;background:linear-gradient(90deg,#34d399,#60a5fa)"></span></div>
+          <div class="small-muted" style="margin-top:6px">Lipides <span id="pctFat" style="float:right">0%</span></div>
+          <div class="progress"><span id="barFat" style="width:0%;background:linear-gradient(90deg,#f59e0b,#f97316)"></span></div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px">
+        <canvas id="macroChart" width="320" height="240" aria-label="Répartition des macronutriments" role="img"></canvas>
+      </div>
+
+      <div class="controls">
+        <button id="exportCsv" class="ghost">Exporter CSV</button>
+        <button id="resetAll" class="ghost">Réinitialiser tout</button>
+        <button id="applyGoals" class="ghost">Sauvegarder objectifs</button>
+      </div>
+
+      <div style="margin-top:12px;color:var(--muted);font-size:0.85rem">
+        Pour valider un jour et potentiellement augmenter ta streak, coche "Jour validé" pour la date sélectionnée ou l'appli le fera automatiquement lorsque les objectifs sont atteints.
+      </div>
+
+      <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+        <input id="daySuccess" type="checkbox" /> <label for="daySuccess" style="margin:0" class="small-muted">Jour validé</label>
+      </div>
+    </aside>
+
+    <footer>YCoatching — Données enregistrées localement dans ton navigateur. Aucun serveur requis.</footer>
+  </div>
+
+<script>
+/*
+  YCoatching v1 — Single file app
+  - LocalStorage key: 'ycoatching-v1'
+  - Structure stored: {settings:{goals...}, foods:[], entries:{YYYY-MM-DD: [items]}, streak:{current, lastSuccessDate}}
+  - Careful numeric operations: use Number(...) and round helper for safe arithmetic
+*/
+
+// ---------- Utilitaires ----------
+const STORAGE_KEY = 'ycoatching-v1';
+const todayStr = () => (new Date()).toISOString().slice(0,10);
+function round1(v){ return Math.round((Number(v) + Number.EPSILON) * 10) / 10; }
+function isoAddDays(iso, days){
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+function daysBetween(aIso, bIso){
+  const a = new Date(aIso+'T00:00:00'), b = new Date(bIso+'T00:00:00');
+  return Math.round((b-a)/(24*3600*1000));
+}
+
+// ---------- Données initiales (base d'aliments) ----------
+const defaultFoods = [
+  // name, per100g: cal, prot, carbs, fat
+  {name:'Pomme (100g)', cal:52, prot:0.3, carbs:14, fat:0.2},
+  {name:'Banane (100g)', cal:89, prot:1.1, carbs:23, fat:0.3},
+  {name:'Riz blanc cuit (100g)', cal:130, prot:2.4, carbs:28, fat:0.3},
+  {name:'Riz complet cuit (100g)', cal:111, prot:2.6, carbs:23, fat:0.9},
+  {name:'Poulet (poitrine) cuit (100g)', cal:165, prot:31, carbs:0, fat:3.6},
+  {name:'Saumon cuit (100g)', cal:208, prot:20, carbs:0, fat:13},
+  {name:'Yaourt nature 0% (100g)', cal:56, prot:10, carbs:3.6, fat:0.4},
+  {name:'Pain complet (100g)', cal:247, prot:13, carbs:41, fat:4.2},
+  {name:'Œuf (100g)', cal:155, prot:13, carbs:1.1, fat:11},
+  {name:'Lentilles cuites (100g)', cal:116, prot:9, carbs:20, fat:0.4},
+  {name:'Avoine (flocons) (100g)', cal:389, prot:16.9, carbs:66.3, fat:6.9},
+  {name:'Fromage blanc 0% (100g)', cal:45, prot:8.1, carbs:3.6, fat:0.1}
+];
+
+// ---------- État en mémoire ----------
+let state = {
+  settings: {
+    goals: {cal:2000, prot:120, carb:230, fat:70}
+  },
+  foods: [], // merge default + user
+  entries: {}, // 'YYYY-MM-DD' => [ {id, name, portion_g, qty, calories, protein, carbs, fat, timestamp} ]
+  streak: {current:0, lastSuccess: null}
+};
+
+// ---------- DOM ----------
+const els = {
+  date: document.getElementById('date'),
+  foodSelect: document.getElementById('food-select'),
+  portion: document.getElementById('portion'),
+  qty: document.getElementById('qty'),
+  calories: document.getElementById('calories'),
+  protein: document.getElementById('protein'),
+  carbs: document.getElementById('carbs'),
+  fat: document.getElementById('fat'),
+  addFoodBtn: document.getElementById('addFoodBtn'),
+  addCustomBtn: document.getElementById('addCustomBtn'),
+  clearFields: document.getElementById('clearFields'),
+  itemsList: document.getElementById('itemsList'),
+  count: document.getElementById('count'),
+  goalCal: document.getElementById('goalCal'),
+  goalProt: document.getElementById('goalProt'),
+  goalCarb: document.getElementById('goalCarb'),
+  goalFat: document.getElementById('goalFat'),
+  totalCal: document.getElementById('totalCal'),
+  totalProt: document.getElementById('totalProt'),
+  totalCarb: document.getElementById('totalCarb'),
+  totalFat: document.getElementById('totalFat'),
+  pctCal: document.getElementById('pctCal'),
+  pctProt: document.getElementById('pctProt'),
+  pctCarb: document.getElementById('pctCarb'),
+  pctFat: document.getElementById('pctFat'),
+  barCal: document.getElementById('barCal'),
+  barProt: document.getElementById('barProt'),
+  barCarb: document.getElementById('barCarb'),
+  barFat: document.getElementById('barFat'),
+  exportCsv: document.getElementById('exportCsv'),
+  resetAll: document.getElementById('resetAll'),
+  applyGoals: document.getElementById('applyGoals'),
+  daySuccess: document.getElementById('daySuccess'),
+  streakDisplay: document.getElementById('streakDisplay'),
+  lastSuccess: document.getElementById('lastSuccess'),
+  searchDay: document.getElementById('searchDay'),
+  filterBtn: document.getElementById('filterBtn'),
+  macroChartEl: document.getElementById('macroChart')
+};
+
+// ---------- Stockage ----------
+function loadState(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      state = {...state, ...parsed};
+      // ensure foods includes defaults but not duplicate
+      const names = new Set(state.foods.map(f=>f.name));
+      defaultFoods.forEach(f => { if(!names.has(f.name)) state.foods.push(f); });
+    } else {
+      state.foods = defaultFoods.slice();
+    }
+  } catch(e){
+    console.error('Load error', e);
+    state.foods = defaultFoods.slice();
+  }
+}
+function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+// ---------- Initialisation UI ----------
+function initUI(){
+  els.date.value = todayStr();
+  // Populate food select
+  refreshFoodSelect();
+  // Load goals
+  els.goalCal.value = state.settings.goals.cal;
+  els.goalProt.value = state.settings.goals.prot;
+  els.goalCarb.value = state.settings.goals.carb;
+  els.goalFat.value = state.settings.goals.fat;
+  // Attach events
+  els.foodSelect.addEventListener('change', onFoodSelect);
+  els.portion.addEventListener('input', onPortionChange);
+  els.qty.addEventListener('input', onPortionChange);
+  els.addFoodBtn.addEventListener('click', onAddFood);
+  els.addCustomBtn.addEventListener('click', onAddCustomFood);
+  els.clearFields.addEventListener('click', clearInputFields);
+  els.date.addEventListener('change', refreshForDate);
+  els.exportCsv.addEventListener('click', exportCSV);
+  els.resetAll.addEventListener('click', resetAll);
+  els.applyGoals.addEventListener('click', applyGoals);
+  els.daySuccess.addEventListener('change', toggleDaySuccess);
+  els.filterBtn.addEventListener('click', filterList);
+  els.searchDay.addEventListener('keyup', (e)=>{ if(e.key==='Enter') filterList(); });
+  // Chart
+  createChart();
+  refreshForDate();
+  renderStreak();
+}
+
+// ---------- Food selection logic ----------
+function refreshFoodSelect(){
+  els.foodSelect.innerHTML = '';
+  state.foods.forEach((f, idx) => {
+    const opt = document.createElement('option');
+    opt.value = idx;
+    opt.textContent = `${f.name} — ${f.cal} kcal/100g`;
+    els.foodSelect.appendChild(opt);
+  });
+  onFoodSelect();
+}
+function onFoodSelect(){
+  const f = state.foods[Number(els.foodSelect.value)];
+  if(!f) return;
+  // fill auto fields based on portion and qty
+  computeFieldsFromFood(f);
+}
+function onPortionChange(){
+  const f = state.foods[Number(els.foodSelect.value)];
+  if(!f) return;
+  computeFieldsFromFood(f);
+}
+function computeFieldsFromFood(f){
+  const portion = Number(els.portion.value) || 100; // g
+  const qty = Number(els.qty.value) || 1;
+  const factor = (portion / 100) * qty;
+  // Compute step by step for numeric safety:
+  const prot = round1((Number(f.prot) || 0) * factor);
+  const carb = round1((Number(f.carbs) || 0) * factor);
+  const fat = round1((Number(f.fat) || 0) * factor);
+  // calories (digit by digit): prot*4 + carb*4 + fat*9  (explicit)
+  const protCals = (prot) * 4;
+  const carbCals = (carb) * 4;
+  const fatCals = (fat) * 9;
+  const cals = Math.round(protCals + carbCals + fatCals);
+  els.protein.value = prot;
+  els.carbs.value = carb;
+  els.fat.value = fat;
+  els.calories.value = cals;
+}
+
+// ---------- Ajouter un aliment / entrée ----------
+function clearInputFields(){
+  els.portion.value = 100; els.qty.value = 1; els.calories.value=''; els.protein.value=''; els.carbs.value=''; els.fat.value='';
+  els.foodSelect.selectedIndex = 0;
+  onFoodSelect();
+}
+function onAddFood(){
+  const date = els.date.value || todayStr();
+  const f = state.foods[Number(els.foodSelect.value)];
+  const portion = Number(els.portion.value) || 100;
+  const qty = Number(els.qty.value) || 1;
+  // retrieve numeric values: prefer user-entered fields
+  const prot = Number(els.protein.value) || 0;
+  const carb = Number(els.carbs.value) || 0;
+  const fat = Number(els.fat.value) || 0;
+  let cals = Number(els.calories.value);
+  if(!Number.isFinite(cals) || cals === 0){
+    // fallback to macros -> calories
+    const pc = prot * 4;
+    const cc = carb * 4;
+    const fc = fat * 9;
+    cals = Math.round(pc + cc + fc);
+  } else {
+    cals = Math.round(cals);
+  }
+  const entry = {
+    id: Date.now() + '-' + Math.floor(Math.random()*1000),
+    name: f ? f.name : 'Personnalisé',
+    portion_g: portion,
+    qty: qty,
+    calories: cals,
+    protein: round1(prot),
+    carbs: round1(carb),
+    fat: round1(fat),
+    timestamp: Date.now()
+  };
+  if(!state.entries[date]) state.entries[date] = [];
+  state.entries[date].push(entry);
+  saveState();
+  refreshForDate();
+  clearInputFields();
+  // after add, check if goals met and update streak automatically
+  evaluateDaySuccess(date);
+}
+
+function onAddCustomFood(){
+  const name = prompt('Nom de l\'aliment (ex: Mon granola maison)');
+  if(!name) return;
+  const cal100 = parseFloat(prompt('Calories pour 100 g (kcal)', '400'));
+  if(!Number.isFinite(cal100)) return alert('Valeur non valide');
+  // ask macros optionally
+  const prot100 = parseFloat(prompt('Protéines pour 100 g (g)', '8')) || 0;
+  const carb100 = parseFloat(prompt('Glucides pour 100 g (g)', '50')) || 0;
+  const fat100 = parseFloat(prompt('Lipides pour 100 g (g)', '15')) || 0;
+  const custom = {name: name.trim(), cal: Math.round(cal100), prot: round1(prot100), carbs: round1(carb100), fat: round1(fat100)};
+  state.foods.push(custom);
+  saveState();
+  refreshFoodSelect();
+  // preselect new
+  els.foodSelect.value = state.foods.length - 1;
+  onFoodSelect();
+}
+
+// ---------- Affichage liste / totals / chart ----------
+function refreshForDate(){
+  const date = els.date.value || todayStr();
+  const items = state.entries[date] || [];
+  // filter
+  renderItems(items);
+  updateTotalsAndUI(date);
+  // set day validated checkbox from stored success state
+  els.daySuccess.checked = isDaySuccessful(date);
+}
+function renderItems(items){
+  els.itemsList.innerHTML = '';
+  if(items.length === 0){ els.itemsList.innerHTML = '<div class="small-muted">Aucun item pour cette date.</div>'; els.count.textContent = 0; return; }
+  items.forEach((it, idx) => {
+    const el = document.createElement('div');
+    el.className = 'item';
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column">
+        <div style="font-weight:700">${escapeHtml(it.name)} <span class="meta">• ${it.portion_g}g × ${it.qty}</span></div>
+        <div class="meta">${it.calories} kcal — ${it.protein} g prot • ${it.carbs} g gluc • ${it.fat} g lip</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="ghost" data-edit="${idx}">✏️</button>
+        <button class="ghost" data-del="${idx}">🗑️</button>
+      </div>
+    `;
+    els.itemsList.appendChild(el);
+  });
+  els.count.textContent = items.length;
+  // Delegation for edit/delete
+  els.itemsList.querySelectorAll('[data-del]').forEach(btn => btn.addEventListener('click', (e)=>{
+    const idx = Number(btn.getAttribute('data-del'));
+    const date = els.date.value || todayStr();
+    if(confirm('Supprimer cet item ?')){
+      state.entries[date].splice(idx,1);
+      if(state.entries[date].length === 0) delete state.entries[date];
+      saveState(); refreshForDate();
+    }
+  }));
+  els.itemsList.querySelectorAll('[data-edit]').forEach(btn => btn.addEventListener('click', (e)=>{
+    const idx = Number(btn.getAttribute('data-edit'));
+    const date = els.date.value || todayStr();
+    const it = state.entries[date][idx];
+    // prefill fields for editing then delete original
+    const foodIndex = state.foods.findIndex(f => f.name === it.name);
+    if(foodIndex>=0) els.foodSelect.value = foodIndex;
+    els.portion.value = it.portion_g;
+    els.qty.value = it.qty;
+    els.calories.value = it.calories;
+    els.protein.value = it.protein;
+    els.carbs.value = it.carbs;
+    els.fat.value = it.fat;
+    // remove original
+    state.entries[date].splice(idx,1);
+    if(state.entries[date].length === 0) delete state.entries[date];
+    saveState(); refreshForDate();
+  }));
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[m]); }
+
+let macroChart = null;
+function createChart(){
+  const ctx = els.macroChartEl.getContext('2d');
+  macroChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Protéines (g)','Glucides (g)','Lipides (g)'],
+      datasets: [{data:[0,0,0], backgroundColor: ['#60a5fa','#34d399','#f59e0b']}]
+    },
+    options: { plugins:{legend:{position:'bottom',labels:{color:'#cbd5e1'}}}, maintainAspectRatio:false }
+  });
+}
+
+function updateTotalsAndUI(date){
+  const items = state.entries[date] || [];
+  let totalProt = 0, totalCarb = 0, totalFat = 0, totalCal = 0;
+  items.forEach(it => {
+    totalProt += Number(it.protein) || 0;
+    totalCarb += Number(it.carbs) || 0;
+    totalFat += Number(it.fat) || 0;
+    totalCal += Number(it.calories) || 0;
+  });
+  totalProt = round1(totalProt); totalCarb = round1(totalCarb); totalFat = round1(totalFat); totalCal = Math.round(totalCal);
+  els.totalCal.textContent = totalCal + ' kcal';
+  els.totalProt.textContent = totalProt + ' g';
+  els.totalCarb.textContent = totalCarb + ' g';
+  els.totalFat.textContent = totalFat + ' g';
+  // goals
+  const g = state.settings.goals;
+  function setBar(value, goal, pctEl, barEl){
+    const pct = goal > 0 ? Math.round((value / goal) * 100) : 0;
+    const capped = Math.min(100, pct);
+    pctEl.textContent = pct + '%';
+    barEl.style.width = capped + '%';
+  }
+  setBar(totalCal, g.cal, els.pctCal, els.barCal);
+  setBar(totalProt, g.prot, els.pctProt, els.barProt);
+  setBar(totalCarb, g.carb, els.pctCarb, els.barCarb);
+  setBar(totalFat, g.fat, els.pctFat, els.barFat);
+  // chart
+  macroChart.data.datasets[0].data = [totalProt, totalCarb, totalFat];
+  macroChart.update();
+  // update streak display if necessary
+  renderStreak();
+}
+
+// ---------- Goals & day success / streak ----------
+function applyGoals(){
+  state.settings.goals.cal = Number(els.goalCal.value) || 0;
+  state.settings.goals.prot = Number(els.goalProt.value) || 0;
+  state.settings.goals.carb = Number(els.goalCarb.value) || 0;
+  state.settings.goals.fat = Number(els.goalFat.value) || 0;
+  saveState();
+  updateTotalsAndUI(els.date.value || todayStr());
+  alert('Objectifs sauvegardés.');
+  // Re-evaluate current date success (maybe goals changed)
+  evaluateDaySuccess(els.date.value || todayStr());
+}
+
+function isDaySuccessful(date){
+  // A day is successful if it was manually validated OR meets all goals
+  const flagKey = 'success:'+date;
+  // store success inside state.streak.successDays? We'll use entries metadata:
+  if(state.entries && state.entries[date] && state.entries[date].__manualSuccess) return true;
+  // compute totals vs goals
+  const items = state.entries[date] || [];
+  let totalProt=0, totalCarb=0, totalFat=0, totalCal=0;
+  items.forEach(it => { totalProt += Number(it.protein)||0; totalCarb += Number(it.carbs)||0; totalFat += Number(it.fat)||0; totalCal += Number(it.calories)||0; });
+  const g = state.settings.goals;
+  const ok = (totalCal >= (g.cal || 0)) && (totalProt >= (g.prot || 0)) && (totalCarb >= (g.carb || 0)) && (totalFat >= (g.fat || 0));
+  return ok;
+}
+
+function toggleDaySuccess(){
+  const date = els.date.value || todayStr();
+  if(!state.entries[date]) state.entries[date]=[];
+  if(els.daySuccess.checked){
+    state.entries[date].__manualSuccess = true;
+  } else {
+    if(state.entries[date].__manualSuccess) delete state.entries[date].__manualSuccess;
+  }
+  saveState();
+  evaluateDaySuccess(date);
+}
+
+function evaluateDaySuccess(date){
+  const success = isDaySuccessful(date);
+  const prevLast = state.streak.lastSuccess;
+  if(success){
+    // if lastSuccess is yesterday -> increment, else set to 1 (start new streak),
+    // but only update if we haven't already counted today's success
+    if(prevLast === date) {
+      // nothing to do
+    } else {
+      // check if prevLast exists and is consecutive
+      if(prevLast && daysBetween(prevLast, date) === 1){
+        state.streak.current = (state.streak.current || 0) + 1;
+      } else {
+        state.streak.current = 1;
+      }
+      state.streak.lastSuccess = date;
+    }
+  } else {
+    // if day not success and date is later than lastSuccess, do not automatically reset streak here.
+    // We'll reset only when user explicitly misses a day in the past or if desired.
+    // For simplicity: if the date equals lastSuccess, keep it; otherwise no change.
+    if(prevLast === date){
+      // If they uncheck the manual success for the day that was recorded as lastSuccess, then reduce streak.
+      // We'll attempt to recalc: find previous successful day to compute streak properly.
+      recalcStreakFromData();
+    }
+  }
+  saveState();
+  renderStreak();
+  // ensure 'daySuccess' checkbox reflects computed success
+  els.daySuccess.checked = success;
+}
+
+function recalcStreakFromData(){
+  // Recalculate streak by scanning success days in entries keys.
+  const dates = Object.keys(state.entries).filter(k=>k && !k.startsWith('__')).sort();
+  let bestCurrent = 0, last = null;
+  // Walk through dates in ascending order and track consecutive success segments
+  for(const d of dates){
+    if(isDaySuccessful(d)){
+      if(last && daysBetween(last,d)===1){
+        bestCurrent += 1;
+      } else {
+        bestCurrent = 1;
+      }
+      last = d;
+    }
+  }
+  state.streak.current = bestCurrent || 0;
+  state.streak.lastSuccess = last || null;
+  saveState();
+}
+
+function renderStreak(){
+  const s = state.streak;
+  const n = s.current || 0;
+  els.streakDisplay.textContent = `🔥 ${n}`;
+  els.lastSuccess.textContent = 'Dernier succès : ' + (s.lastSuccess || '—');
+}
+
+// ---------- Export CSV / reset ----------
+function exportCSV(){
+  // Export all entries as CSV with date, name, portion, qty, cal, prot, carb, fat, timestamp
+  const rows = [['date','nom','portion_g','qty','calories','protein','carbs','fat','timestamp']];
+  Object.keys(state.entries).sort().forEach(date=>{
+    const arr = state.entries[date];
+    if(!Array.isArray(arr)) return;
+    arr.forEach(it=>{
+      rows.push([date, it.name, it.portion_g, it.qty, it.calories, it.protein, it.carbs, it.fat, it.timestamp].map(v=>String(v).replace(/"/g,'""')));
+    });
+  });
+  const csv = rows.map(r => r.map(c=>`"${c}"`).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'ycoatching_export.csv'; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function resetAll(){
+  if(!confirm('Supprimer toutes les données de YCoatching (objectifs, aliments ajoutés, historique) ?')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  // reload page to reinitialize defaults
+  location.reload();
+}
+
+// ---------- Filter search ----------
+function filterList(){
+  const q = (els.searchDay.value || '').trim().toLowerCase();
+  const date = els.date.value || todayStr();
+  if(!q){ refreshForDate(); return; }
+  const items = (state.entries[date] || []).filter(it => it.name.toLowerCase().includes(q));
+  renderItems(items);
+  // update totals for filtered list (not goals)
+  let totalProt=0,totalCarb=0,totalFat=0,totalCal=0;
+  items.forEach(it => { totalProt+=it.protein; totalCarb+=it.carbs; totalFat+=it.fat; totalCal+=it.calories; });
+  els.totalCal.textContent = Math.round(totalCal) + ' kcal';
+  els.totalProt.textContent = round1(totalProt) + ' g';
+  els.totalCarb.textContent = round1(totalCarb) + ' g';
+  els.totalFat.textContent = round1(totalFat) + ' g';
+  macroChart.data.datasets[0].data = [totalProt, totalCarb, totalFat]; macroChart.update();
+}
+
+// ---------- Init ----------
+loadState();
+initUI();
+
+// Optional: try to auto-evaluate today's success on load
+evaluateDaySuccess(els.date.value || todayStr());
+
+</script>
+</body>
+</html>
